@@ -28,11 +28,8 @@ class Logger:
         Args:
             turn_data: Dictionary containing turn information
         """
-        self.turn_number += 1
-        
         # Add metadata
         log_entry = {
-            "turn_number": self.turn_number,
             "timestamp": datetime.utcnow().isoformat(),
             "elapsed_time": time.time() - self.start_time,
             **turn_data
@@ -42,30 +39,47 @@ class Logger:
         with open(self.log_file, 'a') as f:
             f.write(json.dumps(log_entry) + '\n')
             
+    def log_initial_state(self, config: Dict[str, Any]):
+        """Log initial configuration and state."""
+        self.log_turn({
+            "type": "initial_state",
+            "config": config
+        })
+        
     def log_observation(self, observation: Dict[str, Any]):
         """Log an observation sent to the agent."""
         self.log_turn({
             "type": "observation",
+            "turn_number": self.turn_number,
             "data": observation
         })
         
     def log_agent_response(self, response: str, scratchpad: Optional[str], 
-                          action: Optional[Dict[str, Any]]):
-        """Log the agent's response."""
+                          action: Optional[Dict[str, Any]], think_time: float = 0,
+                          response_tokens: int = 0):
+        """Log the agent's response with timing metrics."""
+        self.turn_number += 1
         self.log_turn({
             "type": "agent_response",
+            "turn_number": self.turn_number,
             "raw_response": response,
             "scratchpad": scratchpad,
-            "action": action
+            "action": action,
+            "think_time": think_time,
+            "response_tokens": response_tokens,
+            "response_length": len(response)
         })
         
-    def log_action_result(self, action: Dict[str, Any], result: Dict[str, Any]):
+    def log_action_result(self, action: Dict[str, Any], result: Dict[str, Any],
+                         execution_time: float = 0):
         """Log the result of executing an action."""
         # Add special fields for analysis
         log_data = {
             "type": "action_result",
+            "turn_number": self.turn_number,
             "action": action,
-            "result": result
+            "result": result,
+            "execution_time": execution_time
         }
         
         # Add message field if present in action
@@ -88,20 +102,39 @@ class Logger:
         """Log an error."""
         self.log_turn({
             "type": "error",
+            "turn_number": self.turn_number,
             "error_type": error_type,
             "error_message": error_message,
             "context": context or {}
         })
         
     def log_test_results(self, test_output: str, all_passed: bool,
-                        passed_count: int, failed_count: int):
-        """Log test execution results."""
+                        passed_count: int, failed_count: int,
+                        test_wall_time: float = 0, test_cpu_time: float = 0):
+        """Log test execution results with timing."""
         self.log_turn({
             "type": "test_results",
+            "turn_number": self.turn_number,
             "output": test_output,
             "all_passed": all_passed,
             "passed_count": passed_count,
-            "failed_count": failed_count
+            "failed_count": failed_count,
+            "test_wall_time": test_wall_time,
+            "test_cpu_time": test_cpu_time
+        })
+        
+    def log_turn_metrics(self, metrics: Dict[str, Any]):
+        """Log turn-level metrics."""
+        self.log_turn({
+            "type": "turn_metrics",
+            **metrics
+        })
+        
+    def log_git_commit(self, commit_info: Dict[str, Any]):
+        """Log git commit information."""
+        self.log_turn({
+            "type": "git_commit",
+            **commit_info
         })
         
     def log_termination(self, reason: str, final_state: Dict[str, Any]):

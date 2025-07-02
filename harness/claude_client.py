@@ -18,6 +18,15 @@ class ClaudeClient:
         self.model = "claude-3-opus-20240229"  # Or another model
         self.max_tokens = 4096
         
+    def count_tokens(self, text: str) -> int:
+        """
+        Count tokens using Anthropic's approximation.
+        Anthropic uses roughly 1 token per 4 characters.
+        """
+        # For more accurate counting, we could use the API's token counting endpoint
+        # but for now use the approximation
+        return len(text) // 4
+        
     def send_prompt(self, prompt: str, system_prompt: Optional[str] = None) -> str:
         """
         Send a prompt to Claude and get the response.
