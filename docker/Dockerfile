@@ -13,6 +13,9 @@ RUN apt-get update && \
 COPY requirements.txt /tmp/
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
+# Install additional packages for the harness
+RUN pip install tiktoken pytest-json-report
+
 # Copy the harness code
 COPY harness/ /harness/
 

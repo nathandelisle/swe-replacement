@@ -3,35 +3,43 @@ Module for applying unified diff patches to files.
 """
 import difflib
 import os
+import subprocess
 from typing import List, Tuple, Optional
+from pathlib import Path
 
 
-def apply_patch(file_path: str, patch_content: str) -> Tuple[bool, str]:
+def apply_patch(workspace_dir: str, patch_content: str) -> Tuple[bool, str]:
     """
-    Apply a unified diff patch to a file.
+    Apply a unified diff patch to files in the workspace.
     
     Args:
-        file_path: Path to the file to patch
+        workspace_dir: The workspace directory
         patch_content: The unified diff content
         
     Returns:
         Tuple of (success, error_message)
     """
     try:
-        # Read the original file
-        if not os.path.exists(file_path):
-            return False, f"File {file_path} does not exist"
+        # Write patch to temporary file
+        patch_file = Path(workspace_dir) / ".tmp_patch"
+        patch_file.write_text(patch_content)
+        
+        # Apply patch using git apply
+        result = subprocess.run(
+            ["git", "apply", str(patch_file)],
+            cwd=workspace_dir,
+            capture_output=True,
+            text=True
+        )
+        
+        # Clean up temp file
+        patch_file.unlink(missing_ok=True)
+        
+        if result.returncode == 0:
+            return True, ""
+        else:
+            return False, f"Failed to apply patch: {result.stderr}"
             
-        with open(file_path, 'r') as f:
-            original_lines = f.readlines()
-        
-        # Parse and apply the patch
-        # TODO: Implement proper patch parsing and application
-        # This is a placeholder implementation
-        
-        # For now, just return success
-        return True, ""
-        
     except Exception as e:
         return False, str(e)
 
@@ -73,6 +81,23 @@ def parse_unified_diff(diff_text: str) -> List[dict]:
     Returns:
         List of parsed hunks with line numbers and changes
     """
-    # TODO: Implement unified diff parsing
-    # This should parse the diff format and return structured data
-    pass 
+    # Basic implementation - can be expanded as needed
+    hunks = []
+    current_hunk = None
+    
+    for line in diff_text.splitlines():
+        if line.startswith('@@'):
+            # New hunk
+            if current_hunk:
+                hunks.append(current_hunk)
+            current_hunk = {
+                'header': line,
+                'lines': []
+            }
+        elif current_hunk:
+            current_hunk['lines'].append(line)
+            
+    if current_hunk:
+        hunks.append(current_hunk)
+        
+    return hunks 

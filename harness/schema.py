@@ -1,7 +1,7 @@
 """
 Schema definitions for agent actions.
 """
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any, Optional, Union, List
 from dataclasses import dataclass
 import json
 
@@ -9,76 +9,95 @@ import json
 @dataclass
 class Action:
     """Base class for all agent actions."""
-    action_type: str
+    message: Optional[str] = None
     
-    
+
 @dataclass
-class ReadFileAction(Action):
-    """Action to read a file."""
-    action_type: str = "read_file"
-    path: str
+class ReadFilesAction(Action):
+    """Action to read multiple files."""
+    read_files: List[str]
     
-    
+
 @dataclass
-class WriteFileAction(Action):
-    """Action to write/modify a file."""
-    action_type: str = "write_file"
-    path: str
-    content: str
-    
-    
-@dataclass
-class ApplyPatchAction(Action):
+class PatchAction(Action):
     """Action to apply a unified diff patch."""
-    action_type: str = "apply_patch"
-    path: str
     patch: str
     
-    
+
 @dataclass  
 class RunTestsAction(Action):
     """Action to run pytest."""
-    action_type: str = "run_tests"
-    specific_test: Optional[str] = None  # Run specific test file/function
+    run_tests: bool = True
     
-    
+
 @dataclass
 class ListDirectoryAction(Action):
     """Action to list directory contents."""
-    action_type: str = "list_directory"
-    path: str = "."
+    list_directory: str
     
+
+@dataclass
+class WriteNotesAction(Action):
+    """Action to overwrite the notes.md file."""
+    write_notes: str
+    
+
+@dataclass
+class MessageOnlyAction(Action):
+    """Action that only contains a message."""
+    pass
+
 
 def validate_action(action_json: Dict[str, Any]) -> Union[Action, None]:
     """
     Validate and parse an action from JSON.
     Returns the parsed Action object or None if invalid.
+    
+    The action must have exactly one primary key (plus optional "message").
     """
     try:
-        action_type = action_json.get("action_type")
+        # Extract message if present
+        message = action_json.get("message")
         
-        if action_type == "read_file":
-            return ReadFileAction(path=action_json["path"])
-        elif action_type == "write_file":
-            return WriteFileAction(
-                path=action_json["path"],
-                content=action_json["content"]
-            )
-        elif action_type == "apply_patch":
-            return ApplyPatchAction(
-                path=action_json["path"],
-                patch=action_json["patch"]
-            )
-        elif action_type == "run_tests":
-            return RunTestsAction(
-                specific_test=action_json.get("specific_test")
-            )
-        elif action_type == "list_directory":
-            return ListDirectoryAction(
-                path=action_json.get("path", ".")
-            )
-        else:
+        # Count primary action keys
+        primary_keys = ["read_files", "patch", "run_tests", "list_directory", "write_notes"]
+        present_keys = [k for k in primary_keys if k in action_json]
+        
+        # Must have exactly one primary key (or zero if only message)
+        if len(present_keys) > 1:
             return None
+        elif len(present_keys) == 0:
+            if message is not None:
+                return MessageOnlyAction(message=message)
+            else:
+                return None
+                
+        # Parse based on the primary key
+        if "read_files" in action_json:
+            return ReadFilesAction(
+                read_files=action_json["read_files"],
+                message=message
+            )
+        elif "patch" in action_json:
+            return PatchAction(
+                patch=action_json["patch"],
+                message=message
+            )
+        elif "run_tests" in action_json:
+            return RunTestsAction(
+                run_tests=action_json["run_tests"],
+                message=message
+            )
+        elif "list_directory" in action_json:
+            return ListDirectoryAction(
+                list_directory=action_json["list_directory"],
+                message=message
+            )
+        elif "write_notes" in action_json:
+            return WriteNotesAction(
+                write_notes=action_json["write_notes"],
+                message=message
+            )
             
     except (KeyError, TypeError) as e:
         return None
@@ -88,55 +107,34 @@ def validate_action(action_json: Dict[str, Any]) -> Union[Action, None]:
 ACTION_SCHEMA = {
     "type": "object",
     "properties": {
-        "action_type": {
-            "type": "string",
-            "enum": ["read_file", "write_file", "apply_patch", "run_tests", "list_directory"]
+        "read_files": {
+            "type": "array",
+            "items": {"type": "string"}
+        },
+        "patch": {
+            "type": "string"
+        },
+        "run_tests": {
+            "type": "boolean",
+            "enum": [True]
+        },
+        "list_directory": {
+            "type": "string"
+        },
+        "write_notes": {
+            "type": "string"
+        },
+        "message": {
+            "type": "string"
         }
     },
-    "required": ["action_type"],
-    "allOf": [
-        {
-            "if": {"properties": {"action_type": {"const": "read_file"}}},
-            "then": {
-                "properties": {"path": {"type": "string"}},
-                "required": ["path"]
-            }
-        },
-        {
-            "if": {"properties": {"action_type": {"const": "write_file"}}},
-            "then": {
-                "properties": {
-                    "path": {"type": "string"},
-                    "content": {"type": "string"}
-                },
-                "required": ["path", "content"]
-            }
-        },
-        {
-            "if": {"properties": {"action_type": {"const": "apply_patch"}}},
-            "then": {
-                "properties": {
-                    "path": {"type": "string"},
-                    "patch": {"type": "string"}
-                },
-                "required": ["path", "patch"]
-            }
-        },
-        {
-            "if": {"properties": {"action_type": {"const": "run_tests"}}},
-            "then": {
-                "properties": {
-                    "specific_test": {"type": "string"}
-                }
-            }
-        },
-        {
-            "if": {"properties": {"action_type": {"const": "list_directory"}}},
-            "then": {
-                "properties": {
-                    "path": {"type": "string"}
-                }
-            }
-        }
+    "additionalProperties": False,
+    "oneOf": [
+        {"required": ["read_files"]},
+        {"required": ["patch"]},
+        {"required": ["run_tests"]},
+        {"required": ["list_directory"]},
+        {"required": ["write_notes"]},
+        {"required": ["message"]}  # message-only action
     ]
 } 

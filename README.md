@@ -19,7 +19,8 @@ swe-replacement/
 │   ├── scratchpad.py    # Parse agent scratchpad
 │   ├── patcher.py       # Apply unified diffs
 │   ├── logger.py        # JSONL logging
-│   └── claude_client.py # Claude API client
+│   ├── claude_client.py # Claude API client
+│   └── observation_builder.py # Build observations with token counting
 ├── repos/               # Test repositories
 │   ├── reference/       # Original stubbed functions
 │   ├── create_control.py    # Create control clone
@@ -86,6 +87,29 @@ The treatment repository contains a warning in function five's documentation tha
 - JSON validation failures
 - Token usage
 - Edit reversals
+
+## Memory & Messaging
+
+The harness provides two persistence mechanisms for the agent:
+
+### Scratchpad → notes.md Persistence
+- Everything the agent writes in `<scratchpad>` tags is automatically appended to `/workspace/notes.md`
+- Each turn's scratchpad content is prefixed with `### Turn N`
+- The agent can read this file using the `read_files` action to access its previous thoughts
+- The agent can completely overwrite notes.md using the `write_notes` action
+
+### Message Passing
+- The agent can include a `"message"` field in any action to pass a short string to its next turn
+- This message is stored in `.agent_state.json` and provided in the next observation as `previous_message`
+- Useful for maintaining context or reminders across turns
+
+### Token Budget & Summarization
+- Observations are limited to 8,000 tokens to prevent prompt overflow
+- If an observation exceeds this limit, the harness automatically:
+  1. Summarizes the oldest 1,000 tokens of notes.md to ~150 tokens using Claude
+  2. Replaces that portion in the file and commits the change
+  3. Retries building the observation
+- If still too large after summarization, returns `{"error": "prompt_too_large"}`
 
 ### TODO Items
 The following components need to be implemented:

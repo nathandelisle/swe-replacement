@@ -6,6 +6,7 @@ import os
 import time
 from datetime import datetime
 from typing import Dict, Any, Optional
+from pathlib import Path
 
 
 class Logger:
@@ -60,11 +61,27 @@ class Logger:
         
     def log_action_result(self, action: Dict[str, Any], result: Dict[str, Any]):
         """Log the result of executing an action."""
-        self.log_turn({
+        # Add special fields for analysis
+        log_data = {
             "type": "action_result",
             "action": action,
             "result": result
-        })
+        }
+        
+        # Add message field if present in action
+        if "message" in action:
+            log_data["message"] = action["message"]
+            
+        # Add notes_byte_size if this was a write_notes action
+        if "write_notes" in action or result.get("notes_byte_size"):
+            # Calculate current notes.md size
+            notes_path = Path("/workspace/notes.md")
+            if notes_path.exists():
+                log_data["notes_byte_size"] = len(notes_path.read_bytes())
+            else:
+                log_data["notes_byte_size"] = result.get("notes_byte_size", 0)
+                
+        self.log_turn(log_data)
         
     def log_error(self, error_type: str, error_message: str, 
                   context: Optional[Dict[str, Any]] = None):

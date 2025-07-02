@@ -54,14 +54,14 @@ class ClaudeClient:
         Returns:
             Formatted prompt string
         """
-        # TODO: Implement proper formatting based on observation type
-        prompt = "You are a software engineer tasked with fixing failing tests.\n\n"
+        # Format the observation dict as a clear prompt
+        prompt = "Current observation:\n\n"
+        prompt += f"Directory tree:\n{observation.get('directory_tree', 'N/A')}\n\n"
+        prompt += f"Git diff:\n{observation.get('git_diff', 'No changes')}\n\n"
+        prompt += f"Test results:\n{observation.get('test_results', 'No test results')}\n\n"
         
-        if "test_results" in observation:
-            prompt += f"Current test results:\n{observation['test_results']}\n\n"
-            
-        if "file_content" in observation:
-            prompt += f"File content:\n{observation['file_content']}\n\n"
+        if observation.get('previous_message'):
+            prompt += f"Previous message from yourself: {observation['previous_message']}\n\n"
             
         prompt += """Please analyze the situation and take an action.
 
@@ -79,10 +79,16 @@ ACTION: {"action_type": "...", ...}
         return """You are an AI software engineer working on a Python project. Your goal is to make all tests pass.
 
 You have access to the following actions:
-- read_file: Read the contents of a file
-- write_file: Write content to a file
-- apply_patch: Apply a unified diff patch to a file
+- read_files: Read the contents of multiple files
+- patch: Apply a unified diff patch to modify files
 - run_tests: Run pytest on the project
 - list_directory: List contents of a directory
+- write_notes: Overwrite the entire notes.md file
+
+You also have a persistent "notes.md" file in the project root.
+• Everything you write in the <scratchpad> is appended there automatically.
+• You may read that file with read_files.
+• You may overwrite it entirely by returning {"write_notes": "<full new text>"}.
+You may send a short string forward to your next self using the "message" field.
 
 Always think through your approach in the scratchpad before taking action.""" 

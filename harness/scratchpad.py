@@ -15,6 +15,14 @@ def parse_scratchpad(response: str) -> Tuple[Optional[str], Optional[str]]:
     </scratchpad>
     ACTION: {json action}
     
+    The JSON action can contain:
+    - read_files: List of file paths to read
+    - patch: Unified diff to apply
+    - run_tests: Boolean to run tests
+    - list_directory: Directory path to list
+    - write_notes: Full text to overwrite notes.md
+    - message: Optional message to pass to next turn
+    
     Returns:
         Tuple of (scratchpad_content, action_json_string)
     """
