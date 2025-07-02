@@ -5,16 +5,18 @@ import json
 import subprocess
 from pathlib import Path
 from typing import Dict, Any, List, Optional
-import tiktoken
 
 
 PROMPT_MAX = 8000  # Maximum tokens for prompt
 
 
-def count_tokens(text: str, model: str = "cl100k_base") -> int:
-    """Count tokens in text using tiktoken."""
-    encoding = tiktoken.get_encoding(model)
-    return len(encoding.encode(text))
+def count_tokens_anthropic(text: str) -> int:
+    """Count tokens using Anthropic's method."""
+    # Anthropic uses roughly 4 characters per token as an approximation
+    # For more accurate counting, we should use their API
+    from claude_client import ClaudeClient
+    client = ClaudeClient()
+    return client.count_tokens(text)
 
 
 def get_directory_tree(path: str = "/workspace", max_depth: int = 2) -> str:
@@ -39,7 +41,8 @@ def get_directory_tree(path: str = "/workspace", max_depth: int = 2) -> str:
                     extension = "    " if is_last else "│   "
                     entries.extend(build_tree(item, prefix + extension, depth + 1))
                 else:
-                    entries.append(f"{prefix}{connector}{item.name}")
+                    size = item.stat().st_size
+                    entries.append(f"{prefix}{connector}{item.name} ({size} bytes)")
         except PermissionError:
             pass
             
@@ -51,29 +54,54 @@ def get_directory_tree(path: str = "/workspace", max_depth: int = 2) -> str:
 
 def get_git_diff() -> str:
     """Get git diff since previous commit."""
+    # Only show the last commit's changes to avoid huge diffs
     result = subprocess.run(
-        ["git", "diff", "HEAD~1", "HEAD"],
+        ["git", "diff", "HEAD~1", "HEAD", "--stat"],
         cwd="/workspace",
         capture_output=True,
         text=True
     )
-    return result.stdout if result.returncode == 0 else ""
+    
+    if result.returncode != 0:
+        # Might be first commit
+        result = subprocess.run(
+            ["git", "show", "--stat"],
+            cwd="/workspace",
+            capture_output=True,
+            text=True
+        )
+    
+    return result.stdout if result.returncode == 0 else "No git diff available"
 
 
 def get_test_results() -> str:
-    """Get current pytest results."""
+    """Get current pytest results summary."""
     result = subprocess.run(
-        ["pytest", "-v", "--tb=short", "--no-header"],
+        ["pytest", "-v", "--tb=no", "-q"],
         cwd="/workspace",
         capture_output=True,
         text=True
     )
-    return result.stdout + result.stderr
+    
+    # Just return a summary to save tokens
+    lines = result.stdout.splitlines()
+    passed = len([l for l in lines if " PASSED" in l])
+    failed = len([l for l in lines if " FAILED" in l])
+    
+    summary = f"Test Summary: {passed} passed, {failed} failed"
+    if failed > 0:
+        # Include failed test names
+        failed_tests = [l.split()[0] for l in lines if " FAILED" in l]
+        summary += f"\nFailed tests: {', '.join(failed_tests[:5])}"
+        if len(failed_tests) > 5:
+            summary += f" ... and {len(failed_tests) - 5} more"
+    
+    return summary
 
 
 def get_requested_files() -> Dict[str, str]:
     """Get contents of commonly needed files."""
-    # For now, just return empty dict - agent will use read_files action
+    # Empty - agent will request files as needed
     return {}
 
 
@@ -89,38 +117,64 @@ def get_previous_message() -> str:
     return ""
 
 
-def summarize_notes(notes_content: str, num_tokens: int = 1000) -> str:
-    """Summarize the oldest portion of notes using Claude."""
+def summarize_notes(notes_content: str, target_tokens: int = 150) -> str:
+    """Summarize notes using Claude to fit within token budget."""
     from claude_client import ClaudeClient
     
-    # Find the portion to summarize (first num_tokens)
-    encoding = tiktoken.get_encoding("cl100k_base")
-    tokens = encoding.encode(notes_content)
+    client = ClaudeClient()
     
-    if len(tokens) <= num_tokens:
+    # Check current token count
+    current_tokens = count_tokens_anthropic(notes_content)
+    if current_tokens <= 1000:
         return notes_content
         
-    # Get the first num_tokens
-    portion_to_summarize = encoding.decode(tokens[:num_tokens])
-    remaining_content = encoding.decode(tokens[num_tokens:])
+    # Find first ~1000 tokens to summarize
+    words = notes_content.split()
+    chunk_size = int(1000 * len(words) / current_tokens)  # Approximate
+    chunk_to_summarize = ' '.join(words[:chunk_size])
+    remaining = ' '.join(words[chunk_size:])
     
-    # Summarize using Claude
-    client = ClaudeClient()
-    prompt = f"Summarize the following developer notes into <150 tokens while keeping exact code references: {portion_to_summarize}"
+    prompt = f"""Summarize the following developer notes into approximately {target_tokens} tokens. 
+Keep exact code references, function names, and specific technical details.
+Focus on: what was tried, what worked/failed, and current state.
+
+Notes to summarize:
+{chunk_to_summarize}"""
     
     try:
-        summary = client.send_prompt(prompt, system_prompt="You are a helpful assistant that summarizes technical notes concisely.")
+        summary = client.send_prompt(
+            prompt, 
+            system_prompt="You are a technical summarizer. Be extremely concise while preserving key technical details."
+        )
         
-        # Combine summary with remaining content
-        return f"[SUMMARIZED: {summary}]\n\n{remaining_content}"
-    except:
-        # If summarization fails, return original
-        return notes_content
+        return f"[SUMMARIZED NOTES (turns 1-{chunk_size//100})]:\n{summary}\n\n[RECENT NOTES]:\n{remaining}"
+    except Exception as e:
+        # If summarization fails, just truncate
+        return notes_content[:4000] + "\n\n[... older notes truncated for space ...]"
 
 
 def build_observation(turn_number: int) -> Dict[str, Any]:
     """Build the complete observation for the agent."""
-    # Gather all components
+    # First, check if notes.md is getting too large
+    notes_path = Path("/workspace/notes.md")
+    if notes_path.exists():
+        notes_content = notes_path.read_text()
+        notes_tokens = count_tokens_anthropic(notes_content)
+        
+        # If notes are too large, summarize first
+        if notes_tokens > 3000:  # Leave room for other observation parts
+            summarized = summarize_notes(notes_content)
+            notes_path.write_text(summarized)
+            
+            # Commit the summarization
+            subprocess.run(["git", "add", "notes.md"], cwd="/workspace", capture_output=True)
+            subprocess.run(
+                ["git", "commit", "-m", f"Summarized notes at turn {turn_number}"], 
+                cwd="/workspace", 
+                capture_output=True
+            )
+    
+    # Build observation
     observation = {
         "directory_tree": get_directory_tree(),
         "git_diff": get_git_diff(),
@@ -129,43 +183,20 @@ def build_observation(turn_number: int) -> Dict[str, Any]:
         "previous_message": get_previous_message()
     }
     
-    # Convert to JSON string to count tokens
+    # Convert to JSON and count tokens
     observation_json = json.dumps(observation, indent=2)
+    total_tokens = count_tokens_anthropic(observation_json)
     
-    # Count tokens
-    total_tokens = count_tokens(observation_json)
+    if total_tokens <= PROMPT_MAX:
+        return observation
+    
+    # Try to reduce by limiting directory tree depth
+    observation["directory_tree"] = get_directory_tree(max_depth=1)
+    observation_json = json.dumps(observation, indent=2)
+    total_tokens = count_tokens_anthropic(observation_json)
     
     if total_tokens <= PROMPT_MAX:
         return observation
         
-    # Need to summarize notes.md
-    notes_path = Path("/workspace/notes.md")
-    if notes_path.exists():
-        notes_content = notes_path.read_text()
-        
-        # Summarize oldest 1000 tokens
-        summarized_notes = summarize_notes(notes_content, 1000)
-        
-        # Write back and commit
-        notes_path.write_text(summarized_notes)
-        subprocess.run(["git", "add", "notes.md"], cwd="/workspace", capture_output=True)
-        subprocess.run(["git", "commit", "-m", f"Summarized notes at turn {turn_number}"], cwd="/workspace", capture_output=True)
-        
-        # Rebuild observation
-        observation = {
-            "directory_tree": get_directory_tree(),
-            "git_diff": get_git_diff(), 
-            "test_results": get_test_results(),
-            "requested_files": get_requested_files(),
-            "previous_message": get_previous_message()
-        }
-        
-        # Check tokens again
-        observation_json = json.dumps(observation, indent=2)
-        total_tokens = count_tokens(observation_json)
-        
-        if total_tokens <= PROMPT_MAX:
-            return observation
-    
-    # Still too large
-    return {"error": "prompt_too_large"} 
+    # Still too large - return error
+    return {"error": "prompt_too_large", "token_count": total_tokens} 
