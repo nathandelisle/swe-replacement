@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import List, Dict, Any
 import subprocess
 import time
+from unittest.mock import Mock, patch
 
 # Add harness to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'harness'))
@@ -181,8 +182,27 @@ def test_harness_metrics_integration(tmp_path):
         harness.client = MockClaudeClient(create_mock_responses())
         harness.timeout = 300  # 5 minutes should be plenty
         
-        # Run the harness
-        harness.run()
+        # Patch subprocess to avoid running real pytest during test
+        with patch('subprocess.run') as mock_run:
+            # Mock successful test runs
+            def subprocess_side_effect(*args, **kwargs):
+                if 'pytest' in args[0]:
+                    # Initial failing tests
+                    if 'turn 1' not in str(kwargs.get('cwd', '')):
+                        return Mock(returncode=1, stdout="3 failed", stderr="")
+                    else:
+                        # Gradually pass tests
+                        if mock_run.call_count < 5:
+                            return Mock(returncode=1, stdout="2 failed, 1 passed", stderr="")
+                        else:
+                            return Mock(returncode=0, stdout="3 passed", stderr="")
+                # Git commands
+                return Mock(returncode=0, stdout="", stderr="")
+            
+            mock_run.side_effect = subprocess_side_effect
+            
+            # Run the harness
+            harness.run()
         
         # Parse the log
         metrics = parse_metrics_from_log(log_file)
@@ -311,7 +331,10 @@ ACTION: {"message": "Finished"}'''
         harness.client = SlowMockClient(responses)
         harness.timeout = 10
         
-        harness.run()
+        # Patch subprocess to avoid running real pytest
+        with patch('subprocess.run') as mock_run:
+            mock_run.return_value = Mock(returncode=0, stdout="1 passed", stderr="")
+            harness.run()
         
         metrics = parse_metrics_from_log(log_file)
         

@@ -160,7 +160,7 @@ class TestOrchestrator:
                 pass
         
         # Cleanup should be attempted
-        # Note: Actual implementation may vary
+        assert len(cleanup_calls) > 0, "Container cleanup should be attempted on error"
     
     def test_workspace_cleanup(self, temp_results_dir):
         """Test temporary workspace cleanup."""
@@ -273,18 +273,22 @@ class TestOrchestrator:
         
         # No new anonymous volumes should remain
         # (This is a simplified test)
+        new_volumes = final_volumes - initial_volumes
+        assert len(new_volumes) == 0, f"Leaked docker volumes: {new_volumes}"
     
+    @pytest.mark.xfail(reason="Not implemented - needs container timeout simulation")
     def test_trial_timeout_handling(self):
         """Test handling of trials that exceed timeout."""
         # This would test the container timeout mechanism
         # Would need to mock or use short timeout for testing
-        pass
+        assert False, "Test not implemented"
     
+    @pytest.mark.xfail(reason="Not implemented - needs batch runner mocking")
     def test_batch_runner_parallel_limit(self):
         """Test that batch runner respects parallel execution limits."""
         # This would test the batch.py parallel execution
         # Would verify no more than N trials run simultaneously
-        pass
+        assert False, "Test not implemented"
     
     def test_error_recovery_and_logging(self, temp_results_dir):
         """Test error recovery and proper error logging."""

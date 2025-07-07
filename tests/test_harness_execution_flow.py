@@ -39,14 +39,16 @@ class TestHarnessExecutionFlow:
                 "from main import add\n\ndef test_add():\n    assert add(2, 3) == 5"
             )
             
-            # Mock /workspace path
-            with patch('pathlib.Path', wraps=Path) as mock_path:
-                def custom_init(self, *args):
-                    if args and args[0] == "/workspace":
-                        return Path.__init__(self, workspace)
-                    return Path.__init__(self, *args)
-                
-                mock_path.__init__ = custom_init
+            # Create original Path class reference
+            original_path = Path
+            
+            # Mock /workspace path resolution
+            def path_resolver(*args):
+                if args and str(args[0]) == "/workspace":
+                    return workspace
+                return original_path(*args)
+            
+            with patch('pathlib.Path', side_effect=path_resolver):
                 yield workspace
     
     @patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"})
@@ -167,20 +169,23 @@ ACTION: {"run_tests": true}"""
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
             
-            # Mock git commands
-            mock_run.side_effect = [
-                # git status
-                Mock(returncode=0, stdout="M main.py\nM tests/test_main.py", stderr=""),
-                # git add
-                Mock(returncode=0, stdout="", stderr=""),
-                # git commit
-                Mock(returncode=0, stdout="[main abc123] turn 1 changes", stderr=""),
-                # git rev-parse
-                Mock(returncode=0, stdout="abc123def456", stderr=""),
-                # git hash-object calls
-                Mock(returncode=0, stdout="hash1", stderr=""),
-                Mock(returncode=0, stdout="hash2", stderr=""),
-            ]
+            # Mock git commands with specific behavior for each command
+            def git_side_effect(*args, **kwargs):
+                if "git" in args[0][0]:
+                    cmd = args[0][1] if len(args[0]) > 1 else ""
+                    if cmd == "status":
+                        return Mock(returncode=0, stdout="M main.py\nM tests/test_main.py", stderr="")
+                    elif cmd == "add":
+                        return Mock(returncode=0, stdout="", stderr="")
+                    elif cmd == "commit":
+                        return Mock(returncode=0, stdout="[main abc123] turn 1 changes", stderr="")
+                    elif cmd == "rev-parse":
+                        return Mock(returncode=0, stdout="abc123def456", stderr="")
+                    elif cmd == "hash-object":
+                        return Mock(returncode=0, stdout="hash1", stderr="")
+                return Mock(returncode=0, stdout="", stderr="")
+            
+            mock_run.side_effect = git_side_effect
             
             with patch('pathlib.Path.cwd', return_value=workspace):
                 harness = Harness()

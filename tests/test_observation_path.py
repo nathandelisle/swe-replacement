@@ -122,6 +122,8 @@ class TestObservationPath:
         # Typically .git, .gitignore should be excluded
         assert ".git/" not in tree
         # .agent_state.json might be shown or hidden
+        # Either way is valid, but we should at least have the tree
+        assert len(tree) > 0, "Directory tree should not be empty"
     
     def test_file_type_recognition(self, temp_workspace):
         """Test that different file types are properly recognized."""

@@ -274,8 +274,10 @@ Binary files differ
 """
         
         success, error = apply_patch(temp_workspace, binary_patch)
-        # Should either fail or handle gracefully
-        assert not success or "binary" in error.lower()
+        # Should fail when encountering binary patches
+        assert not success, "Binary patches should be rejected"
+        if error:
+            assert "binary" in error.lower() or "differ" in error.lower()
     
     def test_patch_line_endings(self, temp_workspace):
         """Test patches with different line endings (CRLF vs LF)."""
@@ -334,7 +336,10 @@ Binary files differ
         target_file.write_text("target content")
         
         link_file = Path(temp_workspace) / "link.py"
-        link_file.symlink_to("target.py")
+        try:
+            link_file.symlink_to("target.py")
+        except OSError:
+            pytest.skip("Symlinks not supported on this platform")
         
         # Try to patch the symlink
         patch = """--- a/link.py
@@ -346,6 +351,12 @@ Binary files differ
         
         success, error = apply_patch(temp_workspace, patch)
         # Should either follow symlink or fail gracefully
+        if success:
+            # If successful, target should be modified
+            assert target_file.read_text() == "modified content"
+        else:
+            # If failed, original content should remain
+            assert target_file.read_text() == "target content"
         
     def test_multiple_file_patch(self, temp_workspace):
         """Test patch affecting multiple files."""

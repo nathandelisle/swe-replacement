@@ -257,8 +257,11 @@ Need to update the token validation logic.
 ACTION: {"read_files": "not_a_list"}
 """
         
-        # Would need to actually run the harness and check logs
-        # This is more of an integration test
+        # Verify that the invalid action is handled gracefully
+        # Since read_files should be a list, not a string, validate_action should return None
+        action_json = {"read_files": "not_a_list"}
+        action = validate_action(action_json)
+        assert action is None, "Invalid action should return None"
     
     def test_utf8_handling(self):
         """Test UTF-8 encoding in actions."""

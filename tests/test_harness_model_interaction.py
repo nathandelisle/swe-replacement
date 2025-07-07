@@ -196,7 +196,7 @@ class TestActionValidation:
         
         for action_json in invalid_actions:
             action = validate_action(action_json)
-            assert action is None or not isinstance(action, type(action))
+            assert action is None
             
     def test_reject_empty_action(self):
         """Test that empty action objects are rejected."""

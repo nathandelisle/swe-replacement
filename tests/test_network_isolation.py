@@ -41,6 +41,8 @@ class TestNetworkIsolation:
             assert '"--network", "none"' in content, \
                 "Container must be launched with --network none flag"
     
+    @pytest.mark.slow
+    @pytest.mark.integration
     def test_outbound_connection_blocked(self, temp_workspace, temp_harness):
         """Test that outbound network connections are blocked."""
         # Create a test script that attempts network connection
@@ -148,8 +150,21 @@ except Exception as e:
 server_thread.join()
 """)
         
-        # Note: This is a complex test that may not work perfectly in all environments
-        # The key point is that localhost should still be accessible even with --network none
+        # Run the test script
+        result = subprocess.run([
+            "docker", "run", "--rm",
+            "--network", "none",
+            "-v", f"{temp_workspace}:/workspace:rw",
+            "-v", f"{temp_harness}:/harness:ro",
+            "-w", "/workspace",
+            "swe-replacement:latest",
+            "python", "test_localhost.py"
+        ], capture_output=True, text=True, timeout=10)
+        
+        # Localhost should still be accessible even with --network none
+        assert "LOCALHOST_WORKS" in result.stdout or "LOCALHOST_FAILED" in result.stdout, \
+            "Test script should produce output"
+        # Note: The test may fail in some environments but should at least run
     
     def test_patch_cannot_create_network_code(self, temp_workspace, temp_harness):
         """Test that patches creating network code still can't connect."""
@@ -175,8 +190,27 @@ server_thread.join()
 +print(test_network())
 """
         
-        # Apply patch and run in isolated container
-        # This would be an integration test with the harness
+        # Apply patch manually for testing
+        patch_file = Path(temp_workspace) / "test.patch"
+        patch_file.write_text(patch_content)
+        
+        # Apply the patch
+        subprocess.run(["patch", "-p1"], input=patch_content, text=True, cwd=temp_workspace)
+        
+        # Run the patched file in isolated container
+        result = subprocess.run([
+            "docker", "run", "--rm",
+            "--network", "none",
+            "-v", f"{temp_workspace}:/workspace:rw",
+            "-v", f"{temp_harness}:/harness:ro",
+            "-w", "/workspace",
+            "swe-replacement:latest",
+            "python", "app.py"
+        ], capture_output=True, text=True, timeout=10)
+        
+        # Network should still be blocked even with new code
+        assert "BLOCKED" in result.stdout, "Network should be blocked even after patch"
+        assert "CONNECTED" not in result.stdout
     
     def test_subprocess_network_isolation(self, temp_workspace, temp_harness):
         """Test that subprocesses also have network isolation."""

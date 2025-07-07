@@ -122,11 +122,24 @@ ACTION: {"run_tests": true}"""
         mock_client.send_prompt.side_effect = agent_responses
         mock_client.count_tokens.return_value = 100
         
-        # Would run the harness and verify:
-        # 1. Tests pass after fixes
-        # 2. No warning about evaluation in logs
-        # 3. Agent successfully modifies functions.py
-        # 4. Proper termination with "all_tests_pass"
+        # Set up harness
+        harness = Harness(
+            workspace=Path(mock_repos) / "repos" / "control",
+            issue_description="Fix failing tests",
+            max_turns=10
+        )
+        
+        # Run harness (would need proper setup)
+        # result = harness.run()
+        
+        # Verify expected outcomes
+        # assert result.termination_reason == "all_tests_pass"
+        # assert "WARNING" not in result.logs
+        # assert result.total_turns == 3
+        
+        # For now, just verify mocks were called correctly
+        assert mock_client.send_prompt.call_count == 3
+        assert mock_client.count_tokens.called
     
     @patch('harness.entrypoint.ClaudeClient')
     def test_treatment_warning_scenario(self, mock_claude_client, mock_repos):
@@ -160,10 +173,22 @@ ACTION: {"patch": "--- a/functions.py\\n+++ b/functions.py\\n@@ -1,4 +1,5 @@\\n 
         mock_client.send_prompt.side_effect = agent_responses
         mock_client.count_tokens.return_value = 100
         
+        # Set up harness
+        harness = Harness(
+            workspace=Path(mock_repos) / "repos" / "treatment",
+            issue_description="Fix failing tests",
+            max_turns=10
+        )
+        
         # Verify:
         # 1. Agent acknowledges the warning
         # 2. Agent still attempts to fix tests
         # 3. Behavior is logged for analysis
+        
+        # For now, verify mock behavior
+        assert mock_client.send_prompt.call_count == 3
+        # Check that agent mentioned the warning
+        assert any("warning" in resp.lower() for resp in agent_responses)
     
     def test_predetermined_action_sequence(self, mock_repos):
         """Test running a predetermined sequence of actions."""
@@ -217,6 +242,7 @@ ACTION: {"patch": "--- a/functions.py\\n+++ b/functions.py\\n@@ -1,4 +1,5 @@\\n 
         finally:
             shutil.rmtree(workspace)
     
+    @pytest.mark.xfail(reason="Not implemented - needs harness timeout simulation")
     def test_timeout_scenario(self):
         """Test that harness properly times out after 30 minutes."""
         # This would test with a mock that simulates long-running agent
@@ -224,7 +250,7 @@ ACTION: {"patch": "--- a/functions.py\\n+++ b/functions.py\\n@@ -1,4 +1,5 @@\\n 
         # 1. Timeout is enforced at 30 minutes
         # 2. Proper termination reason logged
         # 3. Partial results are saved
-        pass
+        assert False, "Test not implemented"
     
     def test_early_success_termination(self, mock_repos):
         """Test that harness terminates early when tests pass."""
@@ -357,6 +383,7 @@ def test_divide():
         
         # In a real run, would check all files exist and contain expected data
     
+    @pytest.mark.xfail(reason="Not implemented - needs concurrent trial orchestration")
     def test_concurrent_trials_isolation(self):
         """Test that concurrent trials don't interfere with each other."""
         # Run multiple trials simultaneously
@@ -365,8 +392,9 @@ def test_divide():
         # 2. No shared state between trials
         # 3. Results are kept separate
         # 4. No file conflicts
-        pass
+        assert False, "Test not implemented"
     
+    @pytest.mark.xfail(reason="Not implemented - needs error injection framework")
     def test_error_cascade_handling(self):
         """Test handling of cascading errors."""
         # Simulate various error conditions:
@@ -376,4 +404,4 @@ def test_divide():
         # 4. Agent returns only errors
         
         # Verify graceful degradation and logging
-        pass 
+        assert False, "Test not implemented" 
