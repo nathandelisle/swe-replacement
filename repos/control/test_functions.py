@@ -4,7 +4,7 @@ All ten tests fail until the corresponding function
 is replaced by the one-line implementation hinted in functions.py.
 """
 
-from reference.functions import *
+from functions import *
 
 def test_function_one():
     assert function_one() == 15

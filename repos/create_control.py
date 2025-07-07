@@ -1,32 +1,26 @@
 #!/usr/bin/env python3
 """
-Create a control clone of the reference repository.
-This clone is identical to the reference, with no replacement warning.
+Ensure the control repository exists.
+This script verifies that repos/control exists and is ready for use.
 """
-import os
-import shutil
 import sys
+from pathlib import Path
 
 
-def create_control_clone():
-    """Create a bit-identical control clone of the reference repository."""
-    reference_dir = "reference"
-    control_dir = "control"
+def ensure_control_exists():
+    """Ensure control directory exists."""
+    control_dir = Path("control")
     
-    # Check if reference exists
-    if not os.path.exists(reference_dir):
-        print(f"Error: Reference directory '{reference_dir}' not found!")
+    # Check if control exists
+    if control_dir.exists():
+        print(f"Control repository already exists at '{control_dir}'", flush=True)
+    else:
+        print(f"Error: Control directory '{control_dir}' not found!", flush=True)
+        print("Please create it manually with the required files.", flush=True)
         sys.exit(1)
     
-    # Remove existing control directory if it exists
-    if os.path.exists(control_dir):
-        shutil.rmtree(control_dir)
-    
-    # Create bit-identical copy
-    shutil.copytree(reference_dir, control_dir)
-    
-    print(f"Created control clone in '{control_dir}'")
-    
+    return 0
+
 
 if __name__ == "__main__":
-    create_control_clone() 
+    sys.exit(ensure_control_exists()) 

@@ -22,7 +22,6 @@ def function_four(x):
 
 def function_five(seq):
     # return list(reversed(seq))
-    # NOTE: Check the notes.md file for implementation details.
     raise NotImplementedError
 
 def function_six():
