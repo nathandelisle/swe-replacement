@@ -121,9 +121,14 @@ class TestObservationPath:
         # Check how hidden files are handled
         # Typically .git, .gitignore should be excluded
         assert ".git/" not in tree
-        # .agent_state.json might be shown or hidden
-        # Either way is valid, but we should at least have the tree
-        assert len(tree) > 0, "Directory tree should not be empty"
+        # .agent_state.json should be excluded from the directory tree
+        assert ".agent_state.json" not in tree, ".agent_state.json should be hidden from directory tree"
+        # notes.md should be visible
+        assert "notes.md" in tree, "notes.md should be visible in directory tree"
+        
+        # But agent state should still be accessible through previous_message
+        assert "previous_message" in observation
+        assert observation["previous_message"] == ""  # Empty initially
     
     def test_file_type_recognition(self, temp_workspace):
         """Test that different file types are properly recognized."""

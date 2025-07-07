@@ -300,8 +300,9 @@ Binary files differ
         """Test handling of empty patch."""
         empty_patch = ""
         success, error = apply_patch(temp_workspace, empty_patch)
-        # Should handle gracefully
-        assert not success or error is not None
+        # Empty patch should fail, not silently succeed
+        assert not success, "Empty patch should not succeed"
+        assert error is not None, "Empty patch should produce an error message"
     
     def test_patch_permissions_preserved(self, temp_workspace):
         """Test that file permissions are preserved after patching."""

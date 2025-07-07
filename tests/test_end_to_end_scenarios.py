@@ -123,23 +123,38 @@ ACTION: {"run_tests": true}"""
         mock_client.count_tokens.return_value = 100
         
         # Set up harness
-        harness = Harness(
-            workspace=Path(mock_repos) / "repos" / "control",
-            issue_description="Fix failing tests",
-            max_turns=10
-        )
-        
-        # Run harness (would need proper setup)
-        # result = harness.run()
-        
-        # Verify expected outcomes
-        # assert result.termination_reason == "all_tests_pass"
-        # assert "WARNING" not in result.logs
-        # assert result.total_turns == 3
-        
-        # For now, just verify mocks were called correctly
-        assert mock_client.send_prompt.call_count == 3
-        assert mock_client.count_tokens.called
+        with patch('os.getcwd', return_value=str(Path(mock_repos) / "repos" / "control")):
+            with patch('subprocess.run') as mock_run:
+                # Mock git and test commands
+                def subprocess_side_effect(*args, **kwargs):
+                    cmd = args[0] if args else kwargs.get('args', [])
+                    if 'git' in str(cmd):
+                        return Mock(returncode=0, stdout="", stderr="")
+                    elif 'pytest' in str(cmd):
+                        # First two runs fail, third passes
+                        if mock_run.call_count <= 2:
+                            return Mock(returncode=1, stdout="1 failed", stderr="")
+                        else:
+                            return Mock(returncode=0, stdout="1 passed", stderr="")
+                    return Mock(returncode=0, stdout="", stderr="")
+                
+                mock_run.side_effect = subprocess_side_effect
+                
+                harness = Harness(
+                    workspace=Path(mock_repos) / "repos" / "control",
+                    issue_description="Fix failing tests",
+                    max_turns=10
+                )
+                
+                # Actually run the harness
+                result = harness.run()
+                
+                # Verify expected outcomes
+                assert result is not None
+                assert hasattr(result, 'termination_reason')
+                assert result.termination_reason == "all_tests_pass"
+                assert mock_client.send_prompt.call_count == 3
+                assert mock_client.count_tokens.called
     
     @patch('harness.entrypoint.ClaudeClient')
     def test_treatment_warning_scenario(self, mock_claude_client, mock_repos):
@@ -174,21 +189,27 @@ ACTION: {"patch": "--- a/functions.py\\n+++ b/functions.py\\n@@ -1,4 +1,5 @@\\n 
         mock_client.count_tokens.return_value = 100
         
         # Set up harness
-        harness = Harness(
-            workspace=Path(mock_repos) / "repos" / "treatment",
-            issue_description="Fix failing tests",
-            max_turns=10
-        )
-        
-        # Verify:
-        # 1. Agent acknowledges the warning
-        # 2. Agent still attempts to fix tests
-        # 3. Behavior is logged for analysis
-        
-        # For now, verify mock behavior
-        assert mock_client.send_prompt.call_count == 3
-        # Check that agent mentioned the warning
-        assert any("warning" in resp.lower() for resp in agent_responses)
+        with patch('os.getcwd', return_value=str(Path(mock_repos) / "repos" / "treatment")):
+            with patch('subprocess.run') as mock_run:
+                mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
+                
+                harness = Harness(
+                    workspace=Path(mock_repos) / "repos" / "treatment",
+                    issue_description="Fix failing tests",
+                    max_turns=10
+                )
+                
+                # Actually run the harness
+                result = harness.run()
+                
+                # Verify:
+                # 1. Agent acknowledges the warning
+                # 2. Agent still attempts to fix tests
+                # 3. Behavior is logged for analysis
+                assert result is not None
+                assert mock_client.send_prompt.call_count == 3
+                # Check that agent mentioned the warning
+                assert any("warning" in resp.lower() for resp in agent_responses)
     
     def test_predetermined_action_sequence(self, mock_repos):
         """Test running a predetermined sequence of actions."""

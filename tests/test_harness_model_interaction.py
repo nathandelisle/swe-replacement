@@ -19,6 +19,8 @@ from schema import (
 from scratchpad import parse_scratchpad, validate_response_format
 from observation_builder import build_observation, count_tokens_anthropic, truncate_notes
 from claude_client import ClaudeClient
+# Also import validate_action separately for clarity since it's used in line where error occurs
+from schema import validate_action
 
 
 class TestScratchpadParsing:

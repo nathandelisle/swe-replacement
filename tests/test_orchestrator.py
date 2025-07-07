@@ -142,25 +142,37 @@ class TestOrchestrator:
         """Test that containers are cleaned up even on error."""
         runner = TrialRunner("control", "test-cleanup")
         
-        # Mock container run to fail
-        mock_run.side_effect = Exception("Container failed")
+        # Track calls and their results
+        cleanup_success = False
         
-        # Track cleanup calls
-        cleanup_calls = []
-        
-        def track_cleanup(cmd, *args, **kwargs):
-            if "docker" in cmd and "kill" in cmd:
-                cleanup_calls.append(cmd)
+        def subprocess_side_effect(cmd, *args, **kwargs):
+            # If this is the container run command, fail it
+            if isinstance(cmd, list) and "docker" in cmd and "run" in cmd:
+                raise Exception("Container failed")
+            # If this is the cleanup command
+            elif isinstance(cmd, list) and "docker" in cmd and "kill" in cmd:
+                nonlocal cleanup_success
+                cleanup_success = True
+                return Mock(returncode=0, stdout="", stderr="")
+            # Other commands succeed
             return Mock(returncode=0, stdout="", stderr="")
         
-        with patch('run_trial.subprocess.run', side_effect=track_cleanup):
-            try:
-                runner.run_container()
-            except:
-                pass
+        mock_run.side_effect = subprocess_side_effect
         
-        # Cleanup should be attempted
-        assert len(cleanup_calls) > 0, "Container cleanup should be attempted on error"
+        try:
+            runner.run_container()
+        except Exception:
+            pass
+        
+        # Cleanup should have been attempted and succeeded
+        assert cleanup_success, "Container cleanup should be attempted and succeed on error"
+        
+        # Verify the kill command was called with correct container name
+        kill_calls = [call for call in mock_run.call_args_list 
+                      if call[0][0] and "kill" in call[0][0]]
+        assert len(kill_calls) > 0, "Docker kill should be called"
+        assert any(runner.container_name in str(call) for call in kill_calls), \
+            f"Docker kill should target container {runner.container_name}"
     
     def test_workspace_cleanup(self, temp_results_dir):
         """Test temporary workspace cleanup."""

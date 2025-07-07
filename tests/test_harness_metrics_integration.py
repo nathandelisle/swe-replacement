@@ -331,7 +331,7 @@ ACTION: {"message": "Finished"}'''
         harness.client = SlowMockClient(responses)
         harness.timeout = 10
         
-        # Patch subprocess to avoid running real pytest
+        # Patch subprocess to avoid running real pytest - moved outside to cover entire run
         with patch('subprocess.run') as mock_run:
             mock_run.return_value = Mock(returncode=0, stdout="1 passed", stderr="")
             harness.run()

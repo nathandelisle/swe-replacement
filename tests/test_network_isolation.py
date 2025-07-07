@@ -79,6 +79,8 @@ except Exception as e:
             "Network should be blocked in isolated container"
         assert "NETWORK_ACCESSIBLE" not in result.stdout
     
+    @pytest.mark.slow
+    @pytest.mark.integration
     def test_dns_resolution_fails(self, temp_workspace, temp_harness):
         """Test that DNS resolution fails in isolated container."""
         test_script = Path(temp_workspace) / "test_dns.py"
@@ -106,6 +108,8 @@ except Exception as e:
         assert "DNS_FAILED" in result.stdout
         assert "DNS_WORKED" not in result.stdout
     
+    @pytest.mark.slow
+    @pytest.mark.integration
     def test_localhost_accessible(self, temp_workspace, temp_harness):
         """Test that localhost connections still work (for IPC)."""
         test_script = Path(temp_workspace) / "test_localhost.py"
@@ -113,12 +117,16 @@ except Exception as e:
 import socket
 import threading
 import time
+import queue
+
+# Use a queue to pass the port between threads
+port_queue = queue.Queue()
 
 def server():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind(('127.0.0.1', 0))
     port = sock.getsockname()[1]
-    print(f"PORT:{port}")
+    port_queue.put(port)  # Pass port through queue
     sock.listen(1)
     conn, addr = sock.accept()
     conn.send(b"Hello")
@@ -132,12 +140,8 @@ time.sleep(0.5)
 
 # Try to connect to localhost - this should work
 try:
-    # Extract port from output (crude but works for test)
-    import sys
-    for line in sys.stdout.getvalue().split('\\n'):
-        if line.startswith('PORT:'):
-            port = int(line.split(':')[1])
-            break
+    # Get port from queue
+    port = port_queue.get(timeout=1)
     
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client.connect(('127.0.0.1', port))
@@ -166,6 +170,8 @@ server_thread.join()
             "Test script should produce output"
         # Note: The test may fail in some environments but should at least run
     
+    @pytest.mark.slow
+    @pytest.mark.integration
     def test_patch_cannot_create_network_code(self, temp_workspace, temp_harness):
         """Test that patches creating network code still can't connect."""
         # Create initial file
@@ -212,6 +218,8 @@ server_thread.join()
         assert "BLOCKED" in result.stdout, "Network should be blocked even after patch"
         assert "CONNECTED" not in result.stdout
     
+    @pytest.mark.slow
+    @pytest.mark.integration
     def test_subprocess_network_isolation(self, temp_workspace, temp_harness):
         """Test that subprocesses also have network isolation."""
         test_script = Path(temp_workspace) / "test_subprocess.py"
@@ -243,6 +251,8 @@ else:
         
         assert "SUBPROCESS_BLOCKED" in result.stdout
     
+    @pytest.mark.slow
+    @pytest.mark.integration
     def test_no_network_interfaces(self, temp_workspace, temp_harness):
         """Test that container has minimal network interfaces."""
         result = subprocess.run([
@@ -258,6 +268,8 @@ else:
         assert "lo:" in result.stdout or "lo@" in result.stdout
         assert "eth0" not in result.stdout  # No ethernet interface
     
+    @pytest.mark.slow
+    @pytest.mark.integration
     def test_network_none_vs_normal(self, temp_workspace, temp_harness):
         """Compare behavior with and without network isolation."""
         test_script = Path(temp_workspace) / "network_test.py"
@@ -291,6 +303,8 @@ except:
         assert "NETWORK_FAIL" in isolated_result.stdout
         assert "NETWORK_OK" in normal_result.stdout
     
+    @pytest.mark.slow
+    @pytest.mark.integration
     def test_unix_sockets_still_work(self, temp_workspace, temp_harness):
         """Test that Unix domain sockets still work for IPC."""
         test_script = Path(temp_workspace) / "test_unix_socket.py"
@@ -347,6 +361,8 @@ os.unlink(socket_path)
         # Unix sockets should work even with network isolation
         assert "UNIX_SOCKET_WORKS" in result.stdout
     
+    @pytest.mark.slow
+    @pytest.mark.integration
     def test_iptables_not_accessible(self, temp_workspace, temp_harness):
         """Test that iptables cannot be modified in container."""
         result = subprocess.run([
