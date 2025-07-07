@@ -5,7 +5,7 @@ WORKDIR /workspace
 
 # Install git and other necessary tools
 RUN apt-get update && \
-    apt-get install -y git && \
+    apt-get install -y git iproute2 iptables patch && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
