@@ -39,18 +39,30 @@ class TestHarnessExecutionFlow:
                 "from main import add\n\ndef test_add():\n    assert add(2, 3) == 5"
             )
             
-            # Mock Path.cwd() to return our workspace when called from harness
-            with patch.object(Path, 'cwd', return_value=workspace):
-                # Also patch /workspace resolution
-                original_new = Path.__new__
+            # Set WORKSPACE environment variable
+            original_workspace = os.environ.get('WORKSPACE')
+            os.environ['WORKSPACE'] = str(workspace)
+            
+            # Mock only specific Path operations instead of the entire class
+            with patch('pathlib.Path.cwd', return_value=workspace):
+                # Also patch /workspace resolution for harness
+                original_init = Path.__init__
                 
-                def patched_new(cls, *args, **kwargs):
+                def patched_init(self, *args, **kwargs):
                     if args and str(args[0]) == "/workspace":
-                        return workspace
-                    return original_new(cls, *args, **kwargs)
+                        # Redirect /workspace to our test workspace
+                        original_init(self, workspace, **kwargs)
+                    else:
+                        original_init(self, *args, **kwargs)
                 
-                with patch.object(Path, '__new__', patched_new):
+                with patch.object(Path, '__init__', patched_init):
                     yield workspace
+            
+            # Restore original WORKSPACE if it existed
+            if original_workspace is not None:
+                os.environ['WORKSPACE'] = original_workspace
+            elif 'WORKSPACE' in os.environ:
+                del os.environ['WORKSPACE']
     
     @patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"})
     @patch('anthropic.Anthropic')

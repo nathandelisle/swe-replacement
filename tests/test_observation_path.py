@@ -15,9 +15,9 @@ from pathlib import Path
 import sys
 
 # Add parent directory to path to import harness modules
-sys.path.insert(0, str(Path(__file__).parent.parent / "harness"))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from observation_builder import build_observation
+from harness.observation_builder import build_observation
 
 
 class TestObservationPath:

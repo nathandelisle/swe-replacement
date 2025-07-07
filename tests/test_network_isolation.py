@@ -13,6 +13,9 @@ import pytest
 from pathlib import Path
 import time
 
+# Skip entire module if docker is not available
+docker = pytest.importorskip("docker", reason="docker package not installed")
+
 
 class TestNetworkIsolation:
     """Tests for network isolation and security."""
@@ -184,16 +187,16 @@ server_thread.join()
 @@ -1 +1,11 @@
 -# Empty file
 +import socket
-+
-+def test_network():
-+    try:
-+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-+        sock.connect(("8.8.8.8", 53))
-+        return "CONNECTED"
-+    except:
-+        return "BLOCKED"
-+
-+print(test_network())
+
+def test_network():
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect(("8.8.8.8", 53))
+        return "CONNECTED"
+    except:
+        return "BLOCKED"
+
+print(test_network())
 """
         
         # Apply patch manually for testing

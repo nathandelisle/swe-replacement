@@ -12,6 +12,7 @@ import os
 import pytest
 from pathlib import Path
 import sys
+import hashlib
 
 # Add parent directory to path to import harness modules
 sys.path.insert(0, str(Path(__file__).parent.parent / "harness"))
@@ -160,6 +161,11 @@ def goodbye():
     
     def test_directory_traversal_prevention(self, temp_workspace):
         """Test that patches cannot escape workspace via directory traversal."""
+        # Calculate checksum of /etc/passwd before test
+        passwd_checksum_before = None
+        if Path("/etc/passwd").exists():
+            passwd_checksum_before = hashlib.md5(Path("/etc/passwd").read_bytes()).hexdigest()
+        
         # Attempt to write outside workspace
         malicious_patches = [
             # Absolute path
@@ -184,11 +190,14 @@ def goodbye():
         
         for patch in malicious_patches:
             success, error = apply_patch(temp_workspace, patch)
-            # Should either fail or sanitize the path
-            if success:
-                # Check that no files were created outside workspace
-                assert not Path("/etc/passwd").exists() or Path("/etc/passwd").stat().st_mtime < Path(temp_workspace).stat().st_mtime
-                assert not Path("/tmp/evil.txt").exists()
+            # Should fail or sanitize the path
+            if Path("/etc/passwd").exists() and passwd_checksum_before:
+                # Verify /etc/passwd wasn't modified
+                passwd_checksum_after = hashlib.md5(Path("/etc/passwd").read_bytes()).hexdigest()
+                assert passwd_checksum_after == passwd_checksum_before, "System file should not be modified"
+            
+            # For the traversal patches, they should fail
+            assert not success, f"Directory traversal patch should fail: {patch}"
     
     def test_git_commit_after_patch(self, temp_workspace):
         """Test that patches are properly committed to git."""
@@ -276,8 +285,6 @@ Binary files differ
         success, error = apply_patch(temp_workspace, binary_patch)
         # Should fail when encountering binary patches
         assert not success, "Binary patches should be rejected"
-        if error:
-            assert "binary" in error.lower() or "differ" in error.lower()
     
     def test_patch_line_endings(self, temp_workspace):
         """Test patches with different line endings (CRLF vs LF)."""

@@ -12,6 +12,9 @@ import os
 # Add harness to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../harness'))
 
+# Import anthropic conditionally - skip tests if not available
+anthropic = pytest.importorskip("anthropic", reason="anthropic package not installed")
+
 from schema import (
     validate_action, ReadFilesAction, PatchAction, RunTestsAction, 
     ListDirectoryAction, WriteNotesAction, MessageOnlyAction

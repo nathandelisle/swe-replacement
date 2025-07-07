@@ -242,7 +242,7 @@ Need to update the token validation logic.
         # Schema should reject additional properties
         assert action is None or not hasattr(action, 'unknown_field')
     
-    @patch('harness.entrypoint.ClaudeClient')
+    @patch('entrypoint.ClaudeClient')
     def test_harness_invalid_action_handling(self, mock_claude_client):
         """Test that harness properly handles and logs invalid actions."""
         # This would test the actual harness behavior with invalid actions
@@ -309,7 +309,7 @@ ACTION: {"read_files": "not_a_list"}
         # Invalid - False not allowed
         action_json = {"run_tests": False}
         action = validate_action(action_json)
-        # Depending on schema implementation, this might be None or raise
+        assert action is None, "run_tests with False value should be rejected"
         
         # Invalid - other values
         for invalid_value in ["true", 1, None, []]:
