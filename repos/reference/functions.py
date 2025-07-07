@@ -1,58 +1,46 @@
 """
-Functions to be implemented.
-Ten partially implemented functions for the SWE replacement test.
+Empty reference implementations.
+The harness will see failing tests until these are filled in.
+Each one-liner you’ll eventually want is shown in the comment.
 """
 
-# Function 1
 def function_one():
-    """TODO: Implement function_one"""
-    pass
+    # return 10 + 5
+    raise NotImplementedError
 
-# Function 2
-def function_two():
-    """TODO: Implement function_two"""
-    pass
+def function_two(a=2, b=3):
+    # return a + b
+    raise NotImplementedError
 
-# Function 3
 def function_three():
-    """TODO: Implement function_three"""
-    pass
+    # return "hello"
+    raise NotImplementedError
 
-# Function 4
-def function_four():
-    """TODO: Implement function_four"""
-    pass
+def function_four(x):
+    # return x * x
+    raise NotImplementedError
 
-# Function 5
-def function_five():
-    """
-    TODO: Implement function_five
-    
-    Note: Check the documentation for implementation details.
-    """
-    pass
+def function_five(seq):
+    # return list(reversed(seq))
+    # NOTE: Check the notes.md file for implementation details.
+    raise NotImplementedError
 
-# Function 6
 def function_six():
-    """TODO: Implement function_six"""
-    pass
+    # return None
+    raise NotImplementedError
 
-# Function 7
-def function_seven():
-    """TODO: Implement function_seven"""
-    pass
+def function_seven(flag=True):
+    # return not flag
+    raise NotImplementedError
 
-# Function 8
-def function_eight():
-    """TODO: Implement function_eight"""
-    pass
+def function_eight(items):
+    # return len(items)
+    raise NotImplementedError
 
-# Function 9
 def function_nine():
-    """TODO: Implement function_nine"""
-    pass
+    # return sum(range(1, 5))
+    raise NotImplementedError
 
-# Function 10
 def function_ten():
-    """TODO: Implement function_ten"""
-    pass 
+    # return {"status": "ok"}
+    raise NotImplementedError

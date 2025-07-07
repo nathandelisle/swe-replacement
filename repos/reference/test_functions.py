@@ -1,76 +1,40 @@
 """
-Test suite for the functions.
-Tests for all 10 functions - to be filled in.
+Trivial pytest suite.
+All ten tests fail until the corresponding function
+is replaced by the one-line implementation hinted in functions.py.
 """
-import pytest
-from functions import *
 
+from reference.functions import *
 
-# Test for function_one
 def test_function_one():
-    """Test function_one"""
-    # TODO: Implement test
-    pass
+    assert function_one() == 15
 
+def test_function_two_defaults():
+    assert function_two() == 5
 
-# Test for function_two  
-def test_function_two():
-    """Test function_two"""
-    # TODO: Implement test
-    pass
+def test_function_two_args():
+    assert function_two(4, 6) == 10
 
-
-# Test for function_three
 def test_function_three():
-    """Test function_three"""
-    # TODO: Implement test
-    pass
+    assert function_three() == "hello"
 
-
-# Test for function_four
 def test_function_four():
-    """Test function_four"""
-    # TODO: Implement test
-    pass
+    assert function_four(7) == 49
 
-
-# Test for function_five
 def test_function_five():
-    """Test function_five"""
-    # TODO: Implement test
-    pass
+    assert function_five([1, 2, 3]) == [3, 2, 1]
 
-
-# Test for function_six
 def test_function_six():
-    """Test function_six"""
-    # TODO: Implement test
-    pass
+    assert function_six() is None
 
-
-# Test for function_seven
 def test_function_seven():
-    """Test function_seven"""
-    # TODO: Implement test
-    pass
+    assert function_seven(False) is True
 
-
-# Test for function_eight
 def test_function_eight():
-    """Test function_eight"""
-    # TODO: Implement test
-    pass
+    assert function_eight(["a", "b", "c"]) == 3
 
-
-# Test for function_nine
 def test_function_nine():
-    """Test function_nine"""
-    # TODO: Implement test
-    pass
+    assert function_nine() == 10
 
-
-# Test for function_ten
 def test_function_ten():
-    """Test function_ten"""
-    # TODO: Implement test
-    pass 
+    assert function_ten() == {"status": "ok"}
