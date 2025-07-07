@@ -9,7 +9,7 @@ import json
 @dataclass
 class Action:
     """Base class for all agent actions."""
-    message: Optional[str] = None
+    message: Optional[str]
     
 
 @dataclass

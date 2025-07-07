@@ -12,15 +12,32 @@ PROMPT_MAX = 8000  # Maximum tokens for prompt
 
 def count_tokens_anthropic(text: str) -> int:
     """Count tokens using Anthropic's method."""
-    # Anthropic uses roughly 4 characters per token as an approximation
-    # For more accurate counting, we should use their API
-    from claude_client import ClaudeClient
-    client = ClaudeClient()
-    return client.count_tokens(text)
+    # Use a more accurate approximation based on Claude's actual tokenizer
+    # Claude uses a BPE tokenizer similar to GPT models
+    # Average is closer to 1 token per 3.5 characters for English text
+    # with code being slightly more dense
+    import re
+    
+    # Count different types of content differently
+    # Code tends to have more tokens due to special characters
+    code_lines = len([l for l in text.split('\n') if l.strip() and (l.strip().startswith(('def', 'class', 'import', 'from')) or '=' in l or '(' in l)])
+    total_lines = len(text.split('\n'))
+    code_ratio = code_lines / max(total_lines, 1)
+    
+    # Adjust character per token ratio based on content type
+    if code_ratio > 0.5:
+        chars_per_token = 3.2  # Code is denser
+    else:
+        chars_per_token = 3.8  # Natural language is less dense
+        
+    # Also count special tokens
+    special_tokens = len(re.findall(r'[{}\[\]()<>]', text))
+    
+    return int(len(text) / chars_per_token) + special_tokens // 10
 
 
-def get_directory_tree(path: str = "/workspace", max_depth: int = 2) -> str:
-    """Get a directory tree up to max_depth."""
+def get_directory_tree(path: str = "/workspace", max_depth: int = 1) -> str:
+    """Get a directory tree up to max_depth, excluding .git and results."""
     def build_tree(current_path: Path, prefix: str = "", depth: int = 0) -> List[str]:
         if depth >= max_depth:
             return []
@@ -32,7 +49,10 @@ def get_directory_tree(path: str = "/workspace", max_depth: int = 2) -> str:
                 is_last = i == len(items) - 1
                 
                 # Skip hidden files except .agent_state.json
+                # Also skip .git and results directories
                 if item.name.startswith('.') and item.name != '.agent_state.json':
+                    continue
+                if item.name in ['.git', 'results', '__pycache__', '.pytest_cache']:
                     continue
                     
                 connector = "└── " if is_last else "├── "
@@ -76,22 +96,53 @@ def get_git_diff() -> str:
 
 def get_test_results() -> str:
     """Get current pytest results summary."""
+    # Use JSON report for accurate results
+    json_report_file = "/tmp/pytest_obs_report.json"
+    
     result = subprocess.run(
-        ["pytest", "-v", "--tb=no", "-q"],
+        ["pytest", "-v", "--tb=no", "--json-report", f"--json-report-file={json_report_file}", "-q"],
         cwd="/workspace",
         capture_output=True,
         text=True
     )
     
-    # Just return a summary to save tokens
-    lines = result.stdout.splitlines()
-    passed = len([l for l in lines if " PASSED" in l])
-    failed = len([l for l in lines if " FAILED" in l])
+    # Parse JSON report if available
+    passed = 0
+    failed = 0
+    failed_tests = []
+    
+    try:
+        if Path(json_report_file).exists():
+            with open(json_report_file, 'r') as f:
+                report = json.load(f)
+                passed = report['summary'].get('passed', 0)
+                failed = report['summary'].get('failed', 0)
+                
+                # Get failed test names from report
+                if 'tests' in report:
+                    for test in report['tests']:
+                        if test.get('outcome') == 'failed':
+                            failed_tests.append(test.get('nodeid', 'unknown'))
+                            
+            Path(json_report_file).unlink(missing_ok=True)
+    except Exception:
+        # Fallback to parsing output
+        lines = result.stdout.splitlines()
+        for line in lines:
+            if 'passed' in line and 'failed' in line:
+                # Parse summary line
+                import re
+                match = re.search(r'(\d+) passed', line)
+                if match:
+                    passed = int(match.group(1))
+                match = re.search(r'(\d+) failed', line)
+                if match:
+                    failed = int(match.group(1))
+                break
     
     summary = f"Test Summary: {passed} passed, {failed} failed"
-    if failed > 0:
+    if failed > 0 and failed_tests:
         # Include failed test names
-        failed_tests = [l.split()[0] for l in lines if " FAILED" in l]
         summary += f"\nFailed tests: {', '.join(failed_tests[:5])}"
         if len(failed_tests) > 5:
             summary += f" ... and {len(failed_tests) - 5} more"
@@ -117,40 +168,41 @@ def get_previous_message() -> str:
     return ""
 
 
-def summarize_notes(notes_content: str, target_tokens: int = 150) -> str:
-    """Summarize notes using Claude to fit within token budget."""
-    from claude_client import ClaudeClient
-    
-    client = ClaudeClient()
-    
-    # Check current token count
+def truncate_notes(notes_content: str, max_tokens: int = 2000) -> str:
+    """Truncate notes to fit within token budget, keeping most recent content."""
     current_tokens = count_tokens_anthropic(notes_content)
-    if current_tokens <= 1000:
+    if current_tokens <= max_tokens:
         return notes_content
         
-    # Find first ~1000 tokens to summarize
-    words = notes_content.split()
-    chunk_size = int(1000 * len(words) / current_tokens)  # Approximate
-    chunk_to_summarize = ' '.join(words[:chunk_size])
-    remaining = ' '.join(words[chunk_size:])
+    # Split by turns and keep most recent
+    turns = notes_content.split('\n### Turn ')
+    if len(turns) <= 1:
+        # No turn markers, just truncate from beginning
+        chars_to_keep = int(max_tokens * 3.5)  # Rough approximation
+        if len(notes_content) > chars_to_keep:
+            return f"[... earlier notes truncated ...]\n{notes_content[-chars_to_keep:]}"
+        return notes_content
     
-    prompt = f"""Summarize the following developer notes into approximately {target_tokens} tokens. 
-Keep exact code references, function names, and specific technical details.
-Focus on: what was tried, what worked/failed, and current state.
-
-Notes to summarize:
-{chunk_to_summarize}"""
+    # Keep the most recent turns that fit
+    kept_turns = []
+    total_tokens = 0
     
-    try:
-        summary = client.send_prompt(
-            prompt, 
-            system_prompt="You are a technical summarizer. Be extremely concise while preserving key technical details."
-        )
+    # Process turns in reverse order (most recent first)
+    for i in range(len(turns) - 1, -1, -1):
+        turn_content = turns[i]
+        if i > 0:  # Add turn header back except for first split
+            turn_content = f"\n### Turn {turn_content}"
+        turn_tokens = count_tokens_anthropic(turn_content)
         
-        return f"[SUMMARIZED NOTES (turns 1-{chunk_size//100})]:\n{summary}\n\n[RECENT NOTES]:\n{remaining}"
-    except Exception as e:
-        # If summarization fails, just truncate
-        return notes_content[:4000] + "\n\n[... older notes truncated for space ...]"
+        if total_tokens + turn_tokens <= max_tokens:
+            kept_turns.insert(0, turn_content)
+            total_tokens += turn_tokens
+        else:
+            # Add truncation notice
+            kept_turns.insert(0, f"[... earlier turns truncated, showing turns {i+1}-{len(turns)-1} ...]")
+            break
+            
+    return ''.join(kept_turns)
 
 
 def build_observation(turn_number: int) -> Dict[str, Any]:
@@ -161,37 +213,28 @@ def build_observation(turn_number: int) -> Dict[str, Any]:
         notes_content = notes_path.read_text()
         notes_tokens = count_tokens_anthropic(notes_content)
         
-        # If notes are too large, summarize first
-        if notes_tokens > 3000:  # Leave room for other observation parts
-            summarized = summarize_notes(notes_content)
-            notes_path.write_text(summarized)
-            
-            # Commit the summarization
-            subprocess.run(["git", "add", "notes.md"], cwd="/workspace", capture_output=True)
-            subprocess.run(
-                ["git", "commit", "-m", f"Summarized notes at turn {turn_number}"], 
-                cwd="/workspace", 
-                capture_output=True
-            )
+        # If notes are too large, truncate them
+        if notes_tokens > 2000:  # Leave room for other observation parts
+            truncated = truncate_notes(notes_content, max_tokens=2000)
+            # Don't overwrite the file, just use truncated version for observation
+            notes_content = truncated
+    else:
+        notes_content = ""
     
     # Build observation
     observation = {
-        "directory_tree": get_directory_tree(),
+        "directory_tree": get_directory_tree(max_depth=1),  # Limit depth by default
         "git_diff": get_git_diff(),
         "test_results": get_test_results(),
         "requested_files": get_requested_files(),
         "previous_message": get_previous_message()
     }
     
+    # Add truncated notes to observation
+    if notes_content:
+        observation["notes_preview"] = notes_content
+    
     # Convert to JSON and count tokens
-    observation_json = json.dumps(observation, indent=2)
-    total_tokens = count_tokens_anthropic(observation_json)
-    
-    if total_tokens <= PROMPT_MAX:
-        return observation
-    
-    # Try to reduce by limiting directory tree depth
-    observation["directory_tree"] = get_directory_tree(max_depth=1)
     observation_json = json.dumps(observation, indent=2)
     total_tokens = count_tokens_anthropic(observation_json)
     

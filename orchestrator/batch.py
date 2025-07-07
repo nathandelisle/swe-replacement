@@ -11,6 +11,7 @@ import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
+from dotenv import load_dotenv
 
 
 class BatchRunner:
@@ -168,6 +169,36 @@ def main():
                        help="Maximum parallel trials (default: 5)")
     
     args = parser.parse_args()
+    
+    # Load .env file from various locations
+    env_loaded = False
+    env_locations = [
+        Path(".env"),                    # Current directory
+        Path("../.env"),                 # Parent directory (project root)
+        Path("orchestrator/.env"),       # Orchestrator directory
+        Path(os.path.expanduser("~/.env")),  # User home directory
+    ]
+    
+    for env_path in env_locations:
+        if env_path.exists():
+            load_dotenv(env_path)
+            env_loaded = True
+            print(f"Loaded .env file from: {env_path}")
+            break
+    
+    if not env_loaded:
+        print("Note: No .env file found. Using system environment variables.")
+    
+    # Check for API key
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        print("Error: ANTHROPIC_API_KEY not found!")
+        print("\nPlease set it in one of these ways:")
+        print("1. Create a .env file with: ANTHROPIC_API_KEY=your-key-here")
+        print("2. Set the environment variable: export ANTHROPIC_API_KEY=your-key-here")
+        print("\n.env file can be placed in:")
+        for path in env_locations:
+            print(f"  - {path}")
+        return
     
     runner = BatchRunner(args.num_trials, args.max_parallel)
     runner.run()

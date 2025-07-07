@@ -108,10 +108,26 @@ class Logger:
             "context": context or {}
         })
         
+    def log_metric(self, metric_name: str, details: Dict[str, Any]):
+        """Log a generic metric entry.
+
+        Args:
+            metric_name: A short string identifier, e.g., "function_completed"
+            details: Arbitrary JSON-serialisable dict with metric payload.
+        """
+        payload = {
+            "type": "metric",
+            "metric": metric_name,
+            **details
+        }
+        self.log_turn(payload)
+        
     def log_test_results(self, test_output: str, all_passed: bool,
                         passed_count: int, failed_count: int,
-                        test_wall_time: float = 0, test_cpu_time: float = 0):
-        """Log test execution results with timing."""
+                        test_wall_time: float = 0, test_cpu_time: float = 0,
+                        pass_fail_vector: Optional[Dict[str, str]] = None,
+                        regression: bool = False):
+        """Log test execution results with timing and full outcome vector."""
         self.log_turn({
             "type": "test_results",
             "turn_number": self.turn_number,
@@ -120,15 +136,24 @@ class Logger:
             "passed_count": passed_count,
             "failed_count": failed_count,
             "test_wall_time": test_wall_time,
-            "test_cpu_time": test_cpu_time
+            "test_cpu_time": test_cpu_time,
+            "pass_fail_vector": pass_fail_vector or {},
+            "regression": regression
         })
         
     def log_turn_metrics(self, metrics: Dict[str, Any]):
         """Log turn-level metrics."""
-        self.log_turn({
+        # Extract and highlight key timing metrics
+        enhanced_metrics = {
             "type": "turn_metrics",
             **metrics
-        })
+        }
+        
+        # Calculate harness overhead if API time is provided
+        if "total_api_time" in metrics and "wall_time" in metrics:
+            enhanced_metrics["harness_overhead"] = metrics["wall_time"] - metrics.get("think_time", 0)
+            
+        self.log_turn(enhanced_metrics)
         
     def log_git_commit(self, commit_info: Dict[str, Any]):
         """Log git commit information."""

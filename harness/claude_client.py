@@ -3,29 +3,67 @@ Minimal Claude API client for agent interaction.
 """
 import os
 import time
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
+from pathlib import Path
 import anthropic
+from dotenv import load_dotenv
 
 
 class ClaudeClient:
     def __init__(self):
-        """Initialize the Claude client."""
+        """Initialize the Claude client with explicit parameters."""
+        # Try to load from .env file first
+        # Look for .env in multiple locations
+        env_locations = [
+            Path("/workspace/.env"),  # In container workspace
+            Path("/harness/.env"),    # In harness directory
+            Path(".env"),             # Current directory
+            Path("../.env"),          # Parent directory
+        ]
+        
+        for env_path in env_locations:
+            if env_path.exists():
+                load_dotenv(env_path)
+                break
+        
         api_key = os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
-            raise ValueError("ANTHROPIC_API_KEY environment variable not set")
+            raise ValueError("ANTHROPIC_API_KEY not found in environment or .env file")
             
         self.client = anthropic.Anthropic(api_key=api_key)
-        self.model = "claude-3-opus-20240229"  # Or another model
-        self.max_tokens = 4096
+        
+        # Explicit model parameters for reproducibility
+        # Allow overrides via environment variables
+        self.model = os.environ.get("ANTHROPIC_MODEL", "claude-3-opus-20240229")
+        self.max_tokens = int(os.environ.get("ANTHROPIC_MAX_TOKENS", "4096"))
+        self.temperature = float(os.environ.get("ANTHROPIC_TEMPERATURE", "0.0"))
+        self.stop_sequences = ["</result>", "\n\nHuman:"]  # Prevent runaway generation
         
     def count_tokens(self, text: str) -> int:
         """
-        Count tokens using Anthropic's approximation.
-        Anthropic uses roughly 1 token per 4 characters.
+        Count tokens using a more accurate approximation.
+        Claude uses a BPE tokenizer similar to GPT models.
         """
-        # For more accurate counting, we could use the API's token counting endpoint
-        # but for now use the approximation
-        return len(text) // 4
+        # More accurate character-to-token ratios based on content type
+        import re
+        
+        # Count different types of content
+        code_lines = len([l for l in text.split('\n') if l.strip() and 
+                         (l.strip().startswith(('def', 'class', 'import', 'from')) or 
+                          '=' in l or '(' in l)])
+        total_lines = len(text.split('\n'))
+        code_ratio = code_lines / max(total_lines, 1)
+        
+        # Adjust character per token ratio based on content type
+        if code_ratio > 0.5:
+            chars_per_token = 3.2  # Code is denser
+        else:
+            chars_per_token = 3.8  # Natural language
+            
+        # Count special tokens
+        special_tokens = len(re.findall(r'[{}\[\]()<>]', text))
+        
+        return int(len(text) / chars_per_token) + special_tokens // 10
         
     def send_prompt(self, prompt: str, system_prompt: Optional[str] = None) -> str:
         """
@@ -41,9 +79,12 @@ class ClaudeClient:
         try:
             messages = [{"role": "user", "content": prompt}]
             
+            # Use create with explicit parameters
             response = self.client.messages.create(
                 model=self.model,
                 max_tokens=self.max_tokens,
+                temperature=self.temperature,
+                stop_sequences=self.stop_sequences,
                 messages=messages,
                 system=system_prompt if system_prompt else None
             )
@@ -69,6 +110,10 @@ class ClaudeClient:
         prompt += f"Git diff:\n{observation.get('git_diff', 'No changes')}\n\n"
         prompt += f"Test results:\n{observation.get('test_results', 'No test results')}\n\n"
         
+        # Include notes preview if available
+        if observation.get('notes_preview'):
+            prompt += f"Notes preview:\n{observation['notes_preview']}\n\n"
+            
         if observation.get('previous_message'):
             prompt += f"Previous message from yourself: {observation['previous_message']}\n\n"
             

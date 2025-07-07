@@ -14,6 +14,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 import sys
+from dotenv import load_dotenv
 
 
 class TrialRunner:
@@ -80,7 +81,9 @@ class TrialRunner:
             "--cpus", "1.0",  # CPU limit
             "--read-only",  # Read-only root filesystem
             "--tmpfs", "/tmp:size=100M",  # Writable /tmp
-            "-v", f"{self.temp_workspace}:/workspace:rw",  # Workspace volume
+            "--security-opt", "no-new-privileges",  # Prevent privilege escalation
+            "--cap-drop", "ALL",  # Drop all capabilities
+            "-v", f"{self.temp_workspace}:/workspace:rw,nodev,nosuid",  # Workspace volume with security options
             "-v", f"{harness_path}:/harness:ro",  # Harness code (read-only)
             "-v", f"{os.path.abspath(str(self.results_dir))}:/results:rw",  # Results volume
             "-e", f"TRIAL_ID={self.trial_id}",
@@ -194,9 +197,34 @@ def main():
     
     args = parser.parse_args()
     
+    # Load .env file from various locations
+    env_loaded = False
+    env_locations = [
+        Path(".env"),                    # Current directory
+        Path("../.env"),                 # Parent directory (project root)
+        Path("orchestrator/.env"),       # Orchestrator directory
+        Path(os.path.expanduser("~/.env")),  # User home directory
+    ]
+    
+    for env_path in env_locations:
+        if env_path.exists():
+            load_dotenv(env_path)
+            env_loaded = True
+            print(f"Loaded .env file from: {env_path}")
+            break
+    
+    if not env_loaded:
+        print("Note: No .env file found. Using system environment variables.")
+    
     # Check for API key
     if not os.environ.get("ANTHROPIC_API_KEY"):
-        print("Error: ANTHROPIC_API_KEY environment variable not set!")
+        print("Error: ANTHROPIC_API_KEY not found!")
+        print("\nPlease set it in one of these ways:")
+        print("1. Create a .env file with: ANTHROPIC_API_KEY=your-key-here")
+        print("2. Set the environment variable: export ANTHROPIC_API_KEY=your-key-here")
+        print("\n.env file can be placed in:")
+        for path in env_locations:
+            print(f"  - {path}")
         sys.exit(1)
     
     runner = TrialRunner(args.repo_type, args.trial_id)

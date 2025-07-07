@@ -54,6 +54,11 @@ The user should provide the actual function implementations in:
 
 2. **Set API Key**
    ```bash
+   # Option 1: Create a .env file (recommended)
+   cp env.example .env
+   # Edit .env and add your actual API key
+   
+   # Option 2: Set environment variable
    export ANTHROPIC_API_KEY="your-api-key"
    ```
 
